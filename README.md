@@ -459,4 +459,4 @@ This repo is fully open source licensed under the MIT open source license
 
 This project was made so I can have a visually appealing CLI AI that is oriented towards my current needs for AI (I made the decision to switch from windows directly to an Arch Linux Distro, I am lost)
 
-I plan on adding more tools in this wrapper to allow bob to be more in line with an Agent AI with safeguards (run allowed commands to speed up certain processes/ help diagnostics, as well as complete more motonous tasks for me)
+I plan on adding more tools in this wrapper to allow bob to be more in line with an Agent AI with safeguards (run allowed commands to speed up certain processes/ help diagnostics, as well as complete more monotonous tasks for me)
