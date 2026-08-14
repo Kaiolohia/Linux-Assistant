@@ -460,3 +460,12 @@ This repo is fully open source licensed under the MIT open source license
 This project was made so I can have a visually appealing CLI AI that is oriented towards my current needs for AI (I made the decision to switch from windows directly to an Arch Linux Distro, I am lost)
 
 I plan on adding more tools in this wrapper to allow bob to be more in line with an Agent AI with safeguards (run allowed commands to speed up certain processes/ help diagnostics, as well as complete more monotonous tasks for me)
+
+## Known issues
+
+Sometimes the bot gets into a "search loop", ive noticed this happens mainly with github searches, asking questions about a github repo, or anything else that could path to a github repo.
+
+When in this loop, sometimes it quits later on and provides feedback, sometimes it doesnt provide feedback at all. and sometimes the loop doesnt stop.
+
+If you encounter this, just CTRL + C, or close the console.
+CTRL + C will clear VRAM and stop the searXNG service, closing the console will not (Useful for skipping startup time)
