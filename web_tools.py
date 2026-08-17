@@ -31,25 +31,3 @@ def web_search(query):
 
     return json.dumps(results)
 
-
-# Ollama receives this schema so the model knows it can request
-# a web search and what argument the tool expects.
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the internet for current or external information.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to send to SearXNG.",
-                    }
-                },
-                "required": ["query"],
-            },
-        },
-    }
-]

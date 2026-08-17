@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import json
+import signal
+
 from datetime import datetime
 
 from rich.console import Console
@@ -9,9 +11,117 @@ from rich.panel import Panel
 
 from ollama_client import ask_ollama, unload_model
 from searxng_manager import ensure_searxng_running, stop_searxng
-from web_tools import TOOLS, web_search
+from web_tools import web_search
+from file_search import read_file, read_dir
 
 console = Console()
+
+display_history = []
+
+
+
+def redraw_display(signum, frame):
+    console.clear()
+
+    console.print("Bob the Garuda Hyprland AI assistant")
+    console.print("Type 'exit' to quit.\n")
+
+    for item in display_history:
+        if item["type"] == "bob":
+            console.print(
+                Panel(
+                    Markdown(item["content"]),
+                    title="[bold cyan]Bob[/bold cyan]",
+                    border_style="cyan",
+                    padding=(1, 2),
+                )
+            )
+            console.print()
+        elif item["type"] == "user":
+            console.print(
+            f"[bold green]You:[/bold green] {item["content"]}"
+            )
+            console.print()
+        elif item["type"] == "tool":
+            if item["name"] == "web_search":
+                console.print(f"[dim yellow]{item['content']}[/dim yellow]")
+
+            elif item["name"] == "read_file":
+                console.print(f"[dim green]{item['content']}[/dim green]")
+
+            elif item["name"] == "read_dir":
+                console.print(f"[dim green]{item['content']}[/dim green]")
+    console.print("[bold green]You:[/bold green] ", end="")
+signal.signal(signal.SIGWINCH, redraw_display)
+
+# Ollama receives this schema so the model knows it can request
+# a web search and what argument the tool expects.
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the internet for current or external information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query to send to SearXNG.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type" : "function",
+        "function": {
+            "name": "read_file",
+            "description": (
+                "Read the contents of a file on the user's computer."
+                "Use and absolute or valid relative file path."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "The path of the file to read, for example "
+                            "/home/kai/.config/hypr/hyprland.conf."
+                        ),
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_dir",
+            "description": (
+                "List files inside a directory on the user's computer. "
+                "Use this to discover file locations before reading a file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "The directory path to inspect, for example "
+                            "/home/kai/.config/hypr."
+                        ),
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MODEL = "bob:latest"
@@ -21,6 +131,84 @@ def cleanup():
     unload_model()
     stop_searxng()
 
+def web_search_helper(query, sources_used):
+    display_history.append({
+        "type": "tool",
+        "name": "web_search",
+        "content": f"Searched web: {query}"
+    })
+    try:
+        with console.status(
+            f"[bold yellow]Searching web: {query}[/bold yellow]",
+            spinner="dots",
+            spinner_style="yellow",
+        ):
+            result = web_search(query)
+
+        for source in json.loads(result):
+            source_entry = {
+                "title": source.get("title", ""),
+                "url": source.get("url", ""),
+            }
+
+            if source_entry not in sources_used:
+                sources_used.append(source_entry)
+        console.print(f"[dim yellow]Searched web:[/dim yellow] {query}")
+
+    except Exception as e:
+        console.print(f"[bold red]Web search error:[/bold red] {e}")    
+
+        result = json.dumps({
+            "error": f"Web search failed: {e}"
+        })    
+
+    return result
+
+def read_file_helper(query):
+    display_history.append({
+    "type": "tool",
+    "name": "read_file",
+    "content": f"Read file: {query}"
+    })
+    try:
+        with console.status(
+            f"[bold green]Reading File:[/bold green] {query}",
+            spinner="dots",
+            spinner_style="green",
+        ):
+            result = json.dumps(read_file(query))
+        console.print(f"[dim green]Read file[/dim green] {query}")
+    except Exception as e:
+        console.print(f"[bold red]File read error[/bold red] {e}")
+
+        result = json.dumps({
+            "error": f"File read failed: {e}"
+        })
+
+    return result
+
+def read_dir_helper(query):
+    display_history.append({
+    "type": "tool",
+    "name": "read_dir",
+    "content": f"Read Directory: {query}"
+    })
+    try:
+        with console.status(
+            f"[bold green]Reading Directory:[/bold green] {query}",
+            spinner="dots",
+            spinner_style="green",
+        ):
+            result = json.dumps(read_dir(query))
+        console.print(f"[dim green]Read Directory[/dim green] {query}")
+    except Exception as e:
+        console.print(f"[bold red]Directory read error[/bold red] {e}")
+
+        result = json.dumps({
+            "error": f"Directory read failed: {e}"
+        })
+
+    return result
 
 def main():
     ensure_searxng_running()
@@ -36,6 +224,9 @@ def main():
                 "When the user asks for current, latest, recent, or time-sensitive "
                 "information, search the web and use the current date when forming "
                 "search queries. Do not assume your training-data date is current."
+                "You also have the ability to read the users files from their computer."
+                "Instead of assuming where file locations are, use your file read and directory read"
+                "tools to find the actual location."
             ),
         }
     ]
@@ -57,6 +248,11 @@ def main():
             "role": "user",
             "content": prompt,
         })
+            
+        display_history.append({
+            "type": "user",
+            "content": prompt,
+        })
 
         sources_used = []
 
@@ -64,6 +260,8 @@ def main():
         #   1. Bob requests a tool.
         #   2. Python runs that tool and appends its result.
         #   3. Bob receives the result and either answers or requests another tool.
+        max_searches = 15 # Maximum consecutive web seaches
+        completed_queries = set() # Ensure unique searches each cycle
         while True:
             with console.status(
                 "[bold cyan]Bob is thinking...[/bold cyan]",
@@ -78,13 +276,12 @@ def main():
 
             tool_calls = message.get("tool_calls", [])
 
-            if tool_calls:
-                status.update(
-                    "[bold yellow]Bob is thinking... Searching network...[/bold yellow]"
-                )
-
             # No requested tools means Bob has produced the final answer.
             if not tool_calls:
+                display_history.append({
+                    "type": "bob",
+                    "content" : message.get("content", "")
+                })
                 console.print(
                     Panel(
                         Markdown(message.get("content", "")),
@@ -113,7 +310,7 @@ def main():
             for call in tool_calls:
                 function = call["function"]
 
-                if function["name"] != "web_search":
+                if function["name"] not in ("web_search", "read_file", "read_dir"):
                     continue
 
                 arguments = function.get("arguments", {})
@@ -122,48 +319,44 @@ def main():
                 # arrive as a parsed dict or as a JSON-encoded string.
                 if isinstance(arguments, str):
                     arguments = json.loads(arguments)
-
+    
                 query = arguments.get("query", "")
 
-                try:
-                    with console.status(
-                        f"[bold yellow]Searching web: {query}[/bold yellow]",
-                        spinner="dots",
-                        spinner_style="yellow",
-                    ):
-                        result = web_search(query)
+                # Bob wants to search the web!
+                
+                if function["name"] == "web_search":
 
-                    # Add sources used at the bottom of results for double checking answers
-                    for source in json.loads(result):
-                        source_entry = {
-                            "title": source.get("title", ""),
-                            "url": source.get("url", ""),
-                        }
+                    # Unique check
+                    if query in completed_queries:
+                        continue
 
-                        # Prevent duplicate links from appearing if multiple searches
-                        # return the same page.
-                        if source_entry not in sources_used:
-                            sources_used.append(source_entry)
+                    completed_queries.add(query)
+                    if len(completed_queries) >= max_searches:
+                        break
 
-                    # Persist the attempted query in terminal history after the
-                    # spinner disappears so the user can see what Bob searched.
-                    console.print(f"[dim yellow]Searched web:[/dim yellow] {query}")
-
-                except Exception as error:
-                    console.print(f"[bold red]Web search error:[/bold red] {error}")
-
-                    # Feed the failure back to the model as a normal tool result
-                    # instead of crashing the whole chat session.
-                    result = json.dumps({
-                        "error": f"Web search failed: {error}"
+                    messages.append({
+                        "role": "tool",
+                        "tool_name": "web_search",
+                        "content": web_search_helper(query, sources_used),
                     })
 
-                messages.append({
-                    "role": "tool",
-                    "tool_name": "web_search",
-                    "content": result,
-                })
+                # Bob wants to read a file!
 
+                if function["name"] == "read_file":
+                    messages.append({
+                        "role": "tool",
+                        "tool_name": "read_file",
+                        "content": read_file_helper(query)
+                    })
+
+                # Bob wants to read a directory!
+                
+                if function["name"] == "read_dir":
+                    messages.append({
+                        "role": "tool",
+                        "tool_name": "read_file",
+                        "content": read_dir_helper(query)
+                    })
     cleanup()
 
 
