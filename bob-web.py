@@ -19,7 +19,6 @@ console = Console()
 display_history = []
 
 
-
 def redraw_display(signum, frame):
     console.clear()
 
@@ -37,21 +36,31 @@ def redraw_display(signum, frame):
                 )
             )
             console.print()
-        elif item["type"] == "user":
+            if {"type": "source"} in display_history:
+                console.print("[bold yellow]Sources used:[/bold yellow]")
+        elif item["type"] == "source":
             console.print(
-            f"[bold green]You:[/bold green] {item["content"]}"
+                f"  • [link={item['url']}]{item['title']}[/link]\n"
+                f"    [dim]{item['url']}[/dim]"
             )
+        elif item["type"] == "user":
+            console.print(f"[bold green]You:[/bold green] {item['content']}")
             console.print()
         elif item["type"] == "tool":
             if item["name"] == "web_search":
-                console.print(f"[dim yellow]{item['content']}[/dim yellow]")
-
+                console.print(
+                    f"[dim yellow]Searched web:[/dim yellow] {item['content']}"
+                )
             elif item["name"] == "read_file":
-                console.print(f"[dim green]{item['content']}[/dim green]")
+                console.print(f"[dim green]Read file[/dim green] {item['content']}")
 
             elif item["name"] == "read_dir":
-                console.print(f"[dim green]{item['content']}[/dim green]")
+                console.print(
+                    f"[dim green]Read directory[/dim green] {item['content']}"
+                )
     console.print("[bold green]You:[/bold green] ", end="")
+
+
 signal.signal(signal.SIGWINCH, redraw_display)
 
 # Ollama receives this schema so the model knows it can request
@@ -75,7 +84,7 @@ TOOLS = [
         },
     },
     {
-        "type" : "function",
+        "type": "function",
         "function": {
             "name": "read_file",
             "description": (
@@ -126,17 +135,17 @@ TOOLS = [
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MODEL = "bob:latest"
 
+
 def cleanup():
     """Remove the SearXNG container and clear Ollama VRAM when the script exits."""
     unload_model()
     stop_searxng()
 
+
 def web_search_helper(query, sources_used):
-    display_history.append({
-        "type": "tool",
-        "name": "web_search",
-        "content": f"Searched web: {query}"
-    })
+    display_history.append(
+        {"type": "tool", "name": "web_search", "content": f"{query}"}
+    )
     try:
         with console.status(
             f"[bold yellow]Searching web: {query}[/bold yellow]",
@@ -156,20 +165,15 @@ def web_search_helper(query, sources_used):
         console.print(f"[dim yellow]Searched web:[/dim yellow] {query}")
 
     except Exception as e:
-        console.print(f"[bold red]Web search error:[/bold red] {e}")    
+        console.print(f"[bold red]Web search error:[/bold red] {e}")
 
-        result = json.dumps({
-            "error": f"Web search failed: {e}"
-        })    
+        result = json.dumps({"error": f"Web search failed: {e}"})
 
     return result
 
+
 def read_file_helper(query):
-    display_history.append({
-    "type": "tool",
-    "name": "read_file",
-    "content": f"Read file: {query}"
-    })
+    display_history.append({"type": "tool", "name": "read_file", "content": f"{query}"})
     try:
         with console.status(
             f"[bold green]Reading File:[/bold green] {query}",
@@ -181,18 +185,13 @@ def read_file_helper(query):
     except Exception as e:
         console.print(f"[bold red]File read error[/bold red] {e}")
 
-        result = json.dumps({
-            "error": f"File read failed: {e}"
-        })
+        result = json.dumps({"error": f"File read failed: {e}"})
 
     return result
 
+
 def read_dir_helper(query):
-    display_history.append({
-    "type": "tool",
-    "name": "read_dir",
-    "content": f"Read Directory: {query}"
-    })
+    display_history.append({"type": "tool", "name": "read_dir", "content": f"{query}"})
     try:
         with console.status(
             f"[bold green]Reading Directory:[/bold green] {query}",
@@ -204,11 +203,10 @@ def read_dir_helper(query):
     except Exception as e:
         console.print(f"[bold red]Directory read error[/bold red] {e}")
 
-        result = json.dumps({
-            "error": f"Directory read failed: {e}"
-        })
+        result = json.dumps({"error": f"Directory read failed: {e}"})
 
     return result
+
 
 def main():
     ensure_searxng_running()
@@ -244,15 +242,19 @@ def main():
         if prompt.strip().lower() in {"exit", "quit"}:
             break
 
-        messages.append({
-            "role": "user",
-            "content": prompt,
-        })
-            
-        display_history.append({
-            "type": "user",
-            "content": prompt,
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        )
+
+        display_history.append(
+            {
+                "type": "user",
+                "content": prompt,
+            }
+        )
 
         sources_used = []
 
@@ -260,15 +262,14 @@ def main():
         #   1. Bob requests a tool.
         #   2. Python runs that tool and appends its result.
         #   3. Bob receives the result and either answers or requests another tool.
-        max_searches = 15 # Maximum consecutive web seaches
-        completed_queries = set() # Ensure unique searches each cycle
+        max_searches = 15  # Maximum consecutive web seaches
+        completed_queries = set()  # Ensure unique searches each cycle
         while True:
             with console.status(
                 "[bold cyan]Bob is thinking...[/bold cyan]",
                 spinner="dots",
                 spinner_style="cyan",
             ) as status:
-                
                 response = ask_ollama(messages, TOOLS)
 
             message = response["message"]
@@ -278,10 +279,9 @@ def main():
 
             # No requested tools means Bob has produced the final answer.
             if not tool_calls:
-                display_history.append({
-                    "type": "bob",
-                    "content" : message.get("content", "")
-                })
+                display_history.append(
+                    {"type": "bob", "content": message.get("content", "")}
+                )
                 console.print(
                     Panel(
                         Markdown(message.get("content", "")),
@@ -297,11 +297,18 @@ def main():
                     console.print("[bold yellow]Sources used:[/bold yellow]")
 
                     for source in sources_used:
+                        display_history.append(
+                            {
+                                "type": "source",
+                                "url": f"{source['url']}",
+                                "title": f"{source['title']}",
+                            }
+                        )
                         console.print(
                             f"  • [link={source['url']}]{source['title']}[/link]\n"
                             f"    [dim]{source['url']}[/dim]"
                         )
-                #lazy \n
+                # lazy \n
                 console.print()
                 break
 
@@ -319,13 +326,12 @@ def main():
                 # arrive as a parsed dict or as a JSON-encoded string.
                 if isinstance(arguments, str):
                     arguments = json.loads(arguments)
-    
+
                 query = arguments.get("query", "")
 
                 # Bob wants to search the web!
-                
-                if function["name"] == "web_search":
 
+                if function["name"] == "web_search":
                     # Unique check
                     if query in completed_queries:
                         continue
@@ -334,29 +340,35 @@ def main():
                     if len(completed_queries) >= max_searches:
                         break
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_name": "web_search",
-                        "content": web_search_helper(query, sources_used),
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": "web_search",
+                            "content": web_search_helper(query, sources_used),
+                        }
+                    )
 
                 # Bob wants to read a file!
 
                 if function["name"] == "read_file":
-                    messages.append({
-                        "role": "tool",
-                        "tool_name": "read_file",
-                        "content": read_file_helper(query)
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": "read_file",
+                            "content": read_file_helper(query),
+                        }
+                    )
 
                 # Bob wants to read a directory!
-                
+
                 if function["name"] == "read_dir":
-                    messages.append({
-                        "role": "tool",
-                        "tool_name": "read_file",
-                        "content": read_dir_helper(query)
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": "read_dir",
+                            "content": read_dir_helper(query),
+                        }
+                    )
     cleanup()
 
 
